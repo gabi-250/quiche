@@ -7787,7 +7787,7 @@ mod ffi;
 mod frame;
 pub mod h3;
 mod minmax;
-mod octets;
+pub mod octets;
 mod packet;
 mod rand;
 mod ranges;
