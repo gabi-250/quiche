@@ -119,8 +119,8 @@ impl Args for CommonArgs {
             ("HTTP/0.9", "none") =>
                 (alpns::length_prefixed(&alpns::HTTP_09), false),
 
-            ("HTTP/0.9", _) =>
-                panic!("Unsupported HTTP version and DATAGRAM protocol."),
+            ("HTTP/0.9", "oneway") =>
+                (alpns::length_prefixed(&alpns::HTTP_09), true),
 
             ("HTTP/3", "none") => (alpns::length_prefixed(&alpns::HTTP_3), false),
 
@@ -410,7 +410,6 @@ impl SiDuckConn {
                 Ok(len) => {
                     let data =
                         unsafe { std::str::from_utf8_unchecked(&buf[..len]) };
-                    info!("Received DATAGRAM data {:?}", data);
 
                     // TODO
                     if data != "quack" {
@@ -543,10 +542,11 @@ pub struct Http09Conn {
     reqs_sent: usize,
     reqs_complete: usize,
     reqs: Vec<Http09Request>,
+    dgram_sender: Option<Http3DgramSender>,
 }
 
 impl Http09Conn {
-    pub fn with_urls(urls: &[url::Url], reqs_cardinal: u64) -> Box<dyn HttpConn> {
+    pub fn with_urls(urls: &[url::Url], reqs_cardinal: u64, dgram_sender: Option<Http3DgramSender>) -> Box<dyn HttpConn> {
         let mut reqs = Vec::new();
         for url in urls {
             for i in 1..=reqs_cardinal {
@@ -566,10 +566,27 @@ impl Http09Conn {
             reqs_sent: 0,
             reqs_complete: 0,
             reqs,
+            dgram_sender
         };
 
         Box::new(h_conn)
     }
+
+    pub fn send_dgram(
+        conn: &mut quiche::Connection, flow_id: u64, buf: &[u8],
+    ) -> Result<(), quiche::Error> {
+        let len = quiche::octets::varint_len(flow_id) + buf.len();
+        let mut d = vec![0; len as usize];
+        let mut b = quiche::octets::OctetsMut::with_slice(&mut d);
+
+        b.put_varint(flow_id)?;
+        b.put_bytes(buf)?;
+
+        conn.dgram_send(&d)?;
+
+        Ok(())
+    }
+
 }
 
 impl HttpConn for Http09Conn {
@@ -609,6 +626,35 @@ impl HttpConn for Http09Conn {
         }
 
         self.reqs_sent += reqs_done;
+
+        if let Some(ds) = self.dgram_sender.as_mut() {
+            let mut dgrams_done = 0;
+
+            for _ in ds.dgrams_sent..ds.dgram_count {
+                info!(
+                    "sending HTTP/3 DATAGRAM on flow_id={} with data {:?}",
+                    ds.flow_id,
+                    ds.dgram_content.as_bytes()
+                );
+
+                match Self::send_dgram(
+                    conn,
+                    0,
+                    ds.dgram_content.as_bytes(),
+                ) {
+                    Ok(v) => v,
+
+                    Err(e) => {
+                        error!("failed to send dgram {:?}", e);
+                        break;
+                    },
+                }
+
+                dgrams_done += 1;
+            }
+
+            ds.dgrams_sent += dgrams_done;
+        }
     }
 
     fn handle_responses(
@@ -1046,7 +1092,6 @@ impl Http3Conn {
 
                 match std::fs::read(file_path.as_path()) {
                     Ok(data) => (200, data),
-
                     Err(_) => (404, b"Not Found!".to_vec()),
                 }
             },

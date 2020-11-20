@@ -146,7 +146,7 @@ fn main() {
                     }
 
                     panic!("recv() failed: {:?}", e);
-                },
+                }
             };
 
             debug!("got {} bytes", len);
@@ -163,7 +163,7 @@ fn main() {
                 Err(e) => {
                     error!("Parsing packet header failed: {:?}", e);
                     continue 'read;
-                },
+                }
             };
 
             trace!("got packet {:?}", hdr);
@@ -173,8 +173,8 @@ fn main() {
 
             // Lookup a connection based on the packet's connection ID. If there
             // is no connection matching, create a new one.
-            let (_, client) = if !clients.contains_key(hdr.dcid.as_ref()) &&
-                !clients.contains_key(conn_id)
+            let (_, client) = if !clients.contains_key(hdr.dcid.as_ref())
+                && !clients.contains_key(conn_id)
             {
                 if hdr.ty != quiche::Type::Initial {
                     error!("Packet is not Initial");
@@ -285,7 +285,7 @@ fn main() {
                 Err(e) => {
                     error!("{} recv failed: {:?}", client.conn.trace_id(), e);
                     continue 'read;
-                },
+                }
             };
 
             debug!("{} processed {} bytes", client.conn.trace_id(), read);
@@ -334,14 +334,14 @@ fn main() {
                     Err(quiche::Error::Done) => {
                         debug!("{} done writing", client.conn.trace_id());
                         break;
-                    },
+                    }
 
                     Err(e) => {
                         error!("{} send failed: {:?}", client.conn.trace_id(), e);
 
                         client.conn.close(false, 0x1, b"fail").ok();
                         break;
-                    },
+                    }
                 };
 
                 // TODO: coalesce packets.
@@ -475,7 +475,7 @@ fn handle_stream(client: &mut Client, stream_id: u64, buf: &[u8], root: &str) {
             Err(e) => {
                 error!("{} stream send failed {:?}", conn.trace_id(), e);
                 return;
-            },
+            }
         };
 
         if written < body.len() {
@@ -506,7 +506,7 @@ fn handle_writable(client: &mut Client, stream_id: u64) {
         Err(e) => {
             error!("{} stream send failed {:?}", conn.trace_id(), e);
             return;
-        },
+        }
     };
 
     resp.written += written;

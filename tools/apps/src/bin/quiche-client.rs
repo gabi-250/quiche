@@ -325,8 +325,17 @@ fn main() {
             let app_proto = &std::str::from_utf8(&app_proto).unwrap();
 
             if alpns::HTTP_09.contains(app_proto) {
+                let dgram_sender = if conn_args.dgrams_enabled {
+                    Some(Http3DgramSender::new(
+                        conn_args.dgram_count,
+                        conn_args.dgram_data.clone(),
+                        0,
+                    ))
+                } else {
+                    None
+                };
                 http_conn =
-                    Some(Http09Conn::with_urls(&args.urls, args.reqs_cardinal));
+                    Some(Http09Conn::with_urls(&args.urls, args.reqs_cardinal, dgram_sender));
 
                 app_proto_selected = true;
             } else if alpns::HTTP_3.contains(app_proto) {
